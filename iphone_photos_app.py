@@ -5,8 +5,18 @@ from tkinter import filedialog, ttk
 from pymobiledevice3.lockdown import create_using_usbmux
 from pymobiledevice3.services.afc import AfcService
 
+import android_photos
+
 VIDEO_EXT = {'.mov', '.mp4', '.m4v'}
 SKIP_EXT = {'.aae'}
+
+
+def target_for(dest, flat, name, mts):
+    if flat:
+        return os.path.join(dest, name)
+    dt = datetime.datetime.fromtimestamp(mts)
+    kind = 'видео' if os.path.splitext(name)[1].lower() in VIDEO_EXT else 'фото'
+    return os.path.join(dest, dt.strftime('%Y-%m-%d'), kind, name)
 
 
 async def list_dcim(afc):
@@ -49,16 +59,12 @@ async def sync(dest, start, end, flat, workers, say):
     stats = {'ok': 0, 'skip': 0, 'fail': 0}
     failures = []
 
-    def target_for(name, mts):
-        if flat:
-            return os.path.join(dest, name)
-        dt = datetime.datetime.fromtimestamp(mts)
-        kind = 'видео' if os.path.splitext(name)[1].lower() in VIDEO_EXT else 'фото'
-        return os.path.join(dest, dt.strftime('%Y-%m-%d'), kind, name)
+    def local_target(name, mts):
+        return target_for(dest, flat, name, mts)
 
     async def worker(path, size, mts):
         name = os.path.basename(path)
-        target = target_for(name, mts)
+        target = local_target(name, mts)
         if os.path.exists(target) and os.path.getsize(target) == size:
             stats['skip'] += 1
             return
@@ -94,8 +100,16 @@ async def sync(dest, start, end, flat, workers, say):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Фото с iPhone')
+        self.title('Фото с телефона')
         pad = {'padx': 8, 'pady': 4}
+
+        dev = ttk.LabelFrame(self, text='Устройство')
+        dev.pack(fill='x', **pad)
+        self.device = tk.StringVar(value='iphone')
+        ttk.Radiobutton(dev, text='iPhone', variable=self.device,
+                        value='iphone').pack(side='left', **pad)
+        ttk.Radiobutton(dev, text='Android', variable=self.device,
+                        value='android').pack(side='left', **pad)
 
         f = ttk.Frame(self); f.pack(fill='x', **pad)
         ttk.Label(f, text='Папка:').pack(side='left')
@@ -173,12 +187,17 @@ class App(tk.Tk):
             return
         self.go.config(state='disabled')
         threading.Thread(target=self.run,
-                         args=(dest, start, end, self.flat.get()),
+                         args=(dest, start, end, self.flat.get(),
+                               self.device.get()),
                          daemon=True).start()
 
-    def run(self, dest, start, end, flat):
+    def run(self, dest, start, end, flat, device):
         try:
-            asyncio.run(sync(dest, start, end, flat, 8, self.say))
+            if device == 'android':
+                tf = lambda name, mts: target_for(dest, flat, name, mts)
+                android_photos.sync(dest, start, end, tf, 4, self.say)
+            else:
+                asyncio.run(sync(dest, start, end, flat, 8, self.say))
         except Exception as e:
             self.say(f'Ошибка: {e}\n')
         self.q.put(None)
