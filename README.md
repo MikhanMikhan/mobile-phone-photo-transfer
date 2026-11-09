@@ -39,11 +39,12 @@ pip install -r requirements.txt
 python iphone_photos_app.py
 ```
 
-Также есть консольная версия только для iPhone:
+Также есть консольная версия:
 
 ```bash
 python iphone_photos.py ПАПКА --month 2026-04
 python iphone_photos.py ПАПКА --from 2026-05-01 --to 2026-06-15
+python iphone_photos.py ПАПКА --android --last-week
 ```
 
 ## Сборка .exe
@@ -56,8 +57,13 @@ pyinstaller IPhonePhotos.spec
 
 ## Как это работает
 
-- **iPhone**: библиотека [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) —
-  подключение через usbmuxd, чтение `/DCIM` через сервис AFC.
-- **Android**: `adb shell find/stat` для списка файлов, `adb pull` для скачивания.
+Ядро — модуль `transfer.py`: фильтр по дате (mtime), раскладка по папкам,
+пропуск уже скопированного, повторные попытки, отчёт `unfixable.txt`.
+Устройства подключаются через единый интерфейс (`list_files` / `fetch`):
 
-Файлы выбираются по дате модификации (mtime), служебные `.aae` пропускаются.
+- **iPhone** (`iphone_device.py`): библиотека [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) —
+  подключение через usbmuxd, чтение `/DCIM` через сервис AFC.
+- **Android** (`android_device.py`): `adb shell find/stat` для списка файлов,
+  `adb pull` для скачивания.
+
+Служебные `.aae` пропускаются. Словарь домена — в `CONTEXT.md`.

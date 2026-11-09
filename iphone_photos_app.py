@@ -1,100 +1,14 @@
-# iphone_photos_app.py — единое приложение: GUI + AFC-логика (для сборки в .exe)
-import asyncio, datetime, os, queue, threading, tkinter as tk
+# iphone_photos_app.py — GUI для переноса фото с телефона (для сборки в .exe).
+# Тонкий адаптер: вся логика — в transfer.py, устройства — в *_device.py.
+import datetime
+import os
+import queue
+import threading
+import tkinter as tk
 from tkinter import filedialog, ttk
 
-from pymobiledevice3.lockdown import create_using_usbmux
-from pymobiledevice3.services.afc import AfcService
-
-import android_photos
-
-VIDEO_EXT = {'.mov', '.mp4', '.m4v'}
-SKIP_EXT = {'.aae'}
-
-
-def target_for(dest, flat, name, mts):
-    if flat:
-        return os.path.join(dest, name)
-    dt = datetime.datetime.fromtimestamp(mts)
-    kind = 'видео' if os.path.splitext(name)[1].lower() in VIDEO_EXT else 'фото'
-    return os.path.join(dest, dt.strftime('%Y-%m-%d'), kind, name)
-
-
-async def list_dcim(afc):
-    files = []
-    for d in await afc.listdir('/DCIM'):
-        if not d.endswith('APPLE'):
-            continue
-        sub = f'/DCIM/{d}'
-        try:
-            names = await afc.listdir(sub)
-        except Exception:
-            continue
-        for f in names:
-            if os.path.splitext(f)[1].lower() in SKIP_EXT:
-                continue
-            st = await afc.stat(f'{sub}/{f}')
-            mt = st['st_mtime']
-            mts = mt.timestamp() if isinstance(mt, datetime.datetime) else float(mt)
-            files.append((f'{sub}/{f}', int(st['st_size']), mts))
-    return files
-
-
-async def sync(dest, start, end, flat, workers, say):
-    say(f'Период: {start} .. {end}\n')
-    try:
-        lockdown = await create_using_usbmux(autopair=False)
-    except Exception as e:
-        say(f'Не вижу iPhone: {e}\nПроверьте кабель и «Доверять» на экране.\n')
-        return
-    afc = AfcService(lockdown)
-    say('Читаю список файлов с iPhone...\n')
-    all_files = await list_dcim(afc)
-    sel = [f for f in all_files
-           if start <= datetime.date.fromtimestamp(f[2]) <= end]
-    say(f'На iPhone: {len(all_files)} файлов; в периоде: {len(sel)} '
-        f'({sum(f[1] for f in sel) / 2**30:.1f} ГБ)\n')
-
-    os.makedirs(dest, exist_ok=True)
-    sem = asyncio.Semaphore(workers)
-    stats = {'ok': 0, 'skip': 0, 'fail': 0}
-    failures = []
-
-    def local_target(name, mts):
-        return target_for(dest, flat, name, mts)
-
-    async def worker(path, size, mts):
-        name = os.path.basename(path)
-        target = local_target(name, mts)
-        if os.path.exists(target) and os.path.getsize(target) == size:
-            stats['skip'] += 1
-            return
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        async with sem:
-            err = None
-            for _ in range(3):
-                try:
-                    data = await afc.get_file_contents(path)
-                    if len(data) != size:
-                        raise IOError(f'размер {len(data)} != {size}')
-                    with open(target, 'wb') as fh:
-                        fh.write(data)
-                    stats['ok'] += 1
-                    if stats['ok'] % 100 == 0:
-                        say(f"скопировано {stats['ok']}\n")
-                    return
-                except Exception as e:
-                    err = e
-                    await asyncio.sleep(1)
-            stats['fail'] += 1
-            failures.append(f'{name}: {err}')
-
-    await asyncio.gather(*(worker(*f) for f in sel))
-    say(f"ГОТОВО. скопировано={stats['ok']} уже было={stats['skip']} "
-        f"ошибок={stats['fail']}\n")
-    if failures:
-        with open(os.path.join(dest, 'unfixable.txt'), 'w', encoding='utf-8') as fh:
-            fh.write('\n'.join(failures))
-        say('Список ошибок: unfixable.txt\n')
+import transfer
+from iphone_photos import make_device
 
 
 class App(tk.Tk):
@@ -193,11 +107,9 @@ class App(tk.Tk):
 
     def run(self, dest, start, end, flat, device):
         try:
-            if device == 'android':
-                tf = lambda name, mts: target_for(dest, flat, name, mts)
-                android_photos.sync(dest, start, end, tf, 4, self.say)
-            else:
-                asyncio.run(sync(dest, start, end, flat, 8, self.say))
+            dev = make_device(device == 'android')
+            transfer.run(dev, dest, start, end, flat=flat, workers=4,
+                         say=self.say)
         except Exception as e:
             self.say(f'Ошибка: {e}\n')
         self.q.put(None)
@@ -209,14 +121,16 @@ class App(tk.Tk):
                 if item is None:
                     self.go.config(state='normal')
                 else:
-                    self.say(item)
+                    self._append(item)
         except queue.Empty:
             pass
         self.after(100, self.poll)
 
     def say(self, text):
-        self.q.put(text) if threading.current_thread() is not threading.main_thread() \
-            else self._append(text)
+        if threading.current_thread() is threading.main_thread():
+            self._append(text)
+        else:
+            self.q.put(text)
 
     def _append(self, text):
         self.log.config(state='normal')
