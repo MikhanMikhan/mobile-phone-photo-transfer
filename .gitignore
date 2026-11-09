@@ -1,0 +1,14 @@
+.venv/
+build/
+dist/
+__pycache__/
+*.msi
+*.zip
+# бинарники libimobiledevice (берутся из libim.zip, в репозитории не нужны)
+*.dll
+idevice*.exe
+ios_webkit_debug_proxy.exe
+iproxy.exe
+irecovery.exe
+plist*.exe
+usbmuxd.exe
