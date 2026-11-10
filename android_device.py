@@ -40,8 +40,15 @@ def _run(adb, args):
 
 
 class AndroidDevice:
-    def __init__(self, say=print):
+    def __init__(self, say=print, ip=None):
         self._adb = find_adb(say)
+        if ip:
+            say(f'Подключаюсь к {ip} по Wi-Fi...\n')
+            r = _run(self._adb, ['connect', ip])
+            if 'connected' not in r.stdout.lower():
+                raise RuntimeError(
+                    f'Не удалось подключиться к {ip}: {r.stdout.strip()}\n'
+                    f'На телефоне: Для разработчиков → Беспроводная отладка.')
         r = _run(self._adb, ['devices'])
         lines = [l for l in r.stdout.splitlines()[1:] if l.strip()]
         if not lines:

@@ -1,2 +1,4 @@
 pymobiledevice3
 pyinstaller
+pillow
+pillow-heif

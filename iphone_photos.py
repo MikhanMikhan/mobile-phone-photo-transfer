@@ -28,7 +28,9 @@ def parse_args():
     g.add_argument('--from', dest='date_from', help='с даты ГГГГ-ММ-ДД (нужен и --to)')
     p.add_argument('--to', help='по дату ГГГГ-ММ-ДД (включительно)')
     p.add_argument('--android', action='store_true', help='Android вместо iPhone')
+    p.add_argument('--ip', help='IP телефона для Android по Wi-Fi')
     p.add_argument('--flat', action='store_true', help='без раскладки по дням и фото/видео')
+    p.add_argument('--jpeg', action='store_true', help='конвертировать HEIC в JPEG')
     p.add_argument('--workers', type=int, default=4)
     a = p.parse_args()
     today = datetime.date.today()
@@ -48,10 +50,10 @@ def parse_args():
     return a, start, end
 
 
-def make_device(android):
+def make_device(android, ip=None):
     if android:
         from android_device import AndroidDevice
-        return AndroidDevice()
+        return AndroidDevice(ip=ip or None)
     from iphone_device import IPhoneDevice
     return IPhoneDevice()
 
@@ -59,8 +61,8 @@ def make_device(android):
 if __name__ == '__main__':
     args, start, end = parse_args()
     try:
-        device = make_device(args.android)
+        device = make_device(args.android, args.ip)
     except RuntimeError as e:
         raise SystemExit(e)
     transfer.run(device, args.dest, start, end, flat=args.flat,
-                 workers=args.workers)
+                 workers=args.workers, convert_heic=args.jpeg)

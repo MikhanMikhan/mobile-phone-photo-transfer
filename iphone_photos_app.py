@@ -24,6 +24,9 @@ class App(tk.Tk):
                         value='iphone').pack(side='left', **pad)
         ttk.Radiobutton(dev, text='Android', variable=self.device,
                         value='android').pack(side='left', **pad)
+        ttk.Label(dev, text='IP по Wi-Fi:').pack(side='left')
+        self.ip = ttk.Entry(dev, width=15)
+        self.ip.pack(side='left', padx=4)
 
         f = ttk.Frame(self); f.pack(fill='x', **pad)
         ttk.Label(f, text='Папка:').pack(side='left')
@@ -61,9 +64,18 @@ class App(tk.Tk):
         self.flat = tk.BooleanVar()
         ttk.Checkbutton(self, text='Без раскладки по дням и фото/видео',
                         variable=self.flat).pack(anchor='w', **pad)
+        self.jpeg = tk.BooleanVar()
+        ttk.Checkbutton(self, text='Конвертировать HEIC в JPEG (iPhone)',
+                        variable=self.jpeg).pack(anchor='w', **pad)
 
         self.go = ttk.Button(self, text='Старт', command=self.start)
         self.go.pack(**pad)
+
+        pf = ttk.Frame(self); pf.pack(fill='x', **pad)
+        self.bar = ttk.Progressbar(pf, mode='determinate')
+        self.bar.pack(side='left', fill='x', expand=True)
+        self.bar_text = ttk.Label(pf, text='')
+        self.bar_text.pack(side='left', padx=6)
 
         self.log = tk.Text(self, width=70, height=14, state='disabled')
         self.log.pack(**pad)
@@ -107,12 +119,16 @@ class App(tk.Tk):
 
     def run(self, dest, start, end, flat, device):
         try:
-            dev = make_device(device == 'android')
+            dev = make_device(device == 'android', self.ip.get().strip())
             transfer.run(dev, dest, start, end, flat=flat, workers=4,
-                         say=self.say)
+                         say=self.say, progress=self.progress,
+                         convert_heic=self.jpeg.get())
         except Exception as e:
             self.say(f'Ошибка: {e}\n')
         self.q.put(None)
+
+    def progress(self, done, total):
+        self.q.put((done, total))
 
     def poll(self):
         try:
@@ -120,6 +136,10 @@ class App(tk.Tk):
                 item = self.q.get_nowait()
                 if item is None:
                     self.go.config(state='normal')
+                elif isinstance(item, tuple):
+                    done, total = item
+                    self.bar.config(maximum=total, value=done)
+                    self.bar_text.config(text=f'{done}/{total}')
                 else:
                     self._append(item)
         except queue.Empty:

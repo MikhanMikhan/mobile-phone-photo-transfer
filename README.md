@@ -10,7 +10,7 @@
 
 ## Быстрый старт (готовый .exe)
 
-1. Скачайте `IPhonePhotos.exe` из раздела **Releases**.
+1. Скачайте `PhonePhotoTransfer.exe` из раздела **Releases**.
 2. Подготовьте телефон (см. ниже), подключите кабелем.
 3. Запустите программу, выберите устройство, папку и период, нажмите «Старт».
 
@@ -29,6 +29,15 @@
 - Программа сама скачает `adb` (Android platform-tools) с сайта Google
   при первом запуске — нужен интернет.
 - Копируются `/sdcard/DCIM`, `/sdcard/Pictures`, `/sdcard/Movies`.
+- Можно по Wi-Fi: включите «Беспроводную отладку» на телефоне и введите
+  его IP в поле «IP по Wi-Fi».
+
+## Возможности
+
+- Прогресс-бар и счётчик скопированных файлов.
+- Галочка «Конвертировать HEIC в JPEG» — фото iPhone сохраняются в JPEG.
+- Сверка уже скопированного по размеру и дате — повторный запуск докачивает
+  только новое.
 
 ## Запуск из исходников
 
@@ -45,15 +54,23 @@ python iphone_photos_app.py
 python iphone_photos.py ПАПКА --month 2026-04
 python iphone_photos.py ПАПКА --from 2026-05-01 --to 2026-06-15
 python iphone_photos.py ПАПКА --android --last-week
+python iphone_photos.py ПАПКА --android --ip 192.168.1.50 --month 2026-04
+python iphone_photos.py ПАПКА --month 2026-04 --jpeg
+```
+
+## Тесты
+
+```bash
+python -m unittest test_transfer
 ```
 
 ## Сборка .exe
 
 ```bash
-pyinstaller IPhonePhotos.spec
+pyinstaller PhonePhotoTransfer.spec
 ```
 
-Готовый файл появится в `dist\IPhonePhotos.exe`.
+Готовый файл появится в `dist\PhonePhotoTransfer.exe`.
 
 ## Как это работает
 
